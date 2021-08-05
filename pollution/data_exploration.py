@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point
+import datetime
 
 # Path
 wd=Path.cwd()
@@ -48,20 +49,25 @@ stations['first_reading'] = stations.apply(lambda row: data.loc[data['serialno']
 stations['last_reading'] = stations.apply(lambda row: data.loc[data['serialno'] == row.station, 'timearray'].max(), axis = 1)
 stations['time_coverage'] = stations.last_reading - stations.first_reading
 
+# average time coverage # 200 days
+sum(stations.time_coverage[0:500].tolist(), datetime.timedelta()) /len(stations.time_coverage[0:500])
+
+
 # add dummies for pollution available
 sensor = data['sensorName'].drop_duplicates().tolist()
 for s in sensor:
     stations[s] = stations.apply(lambda row: True in data.loc[data['serialno'] == row.station, 'sensorName'].str.contains(s).tolist(), axis = 1)
 
+
 # percent of missings for each stations in avrangearray
-stations['missing_perc'] = stations.apply(lambda row: data.loc[(data['serialno'] == row.station) & (data['avrangearray'] == 0), 'avrangearray'].count() / data.loc[data['serialno'] == row.station, 'avrangearray'].count(), axis=1)
+stations['missing_perc'] = stations.apply(lambda row: len(data.loc[(data['serialno'] == row.station) & (data['avrangearray'] == 0), 'avrangearray']) / len(data.loc[data['serialno'] == row.station, 'avrangearray']), axis = 1)
+
 # multiply by 100
 stations['missing_perc'] = stations['missing_perc'] * 100
 
 ''' assumes that 0 means missing'''
-''' check code again'''
 
-np.mean(stations.missing_perc) # 4% missing
+np.mean(stations.missing_perc) # 1.4% missing
 
 #*#########################
 #! geo dimension
@@ -88,8 +94,6 @@ stations_delhi = stations[stations_delhi]
 
 np.mean(stations_delhi.missing_perc) # 1%
 
-# extract centroid of each grid
-grid['center'] = grid.apply(lambda row: row.geometry.centroid,axis=1)
 
 # assign gridcell to stations in dehli
 
@@ -113,6 +117,9 @@ stations_delhi['grid_geometry'] = stations_delhi.apply(lambda row: dict[row.loc[
 #*#########################
 #! GRID as cross-section
 #*#########################
+
+# extract centroid of each grid
+grid['center'] = grid.apply(lambda row: row.geometry.centroid,axis=1)
 
 # add stations column to grid
 dict = {}
@@ -138,6 +145,8 @@ for s in sensor:
 for gr in grid.grid_id:
     # extract list of stations in grid cell
     stat = grid.loc[grid.grid_id == gr,'stations'].reset_index(drop=True)[0]
+    # centroid of grid cell
+    center = grid.loc[grid.grid_id == gr, 'center'].reset_index(drop=True)[0]
     # if stat is not empty
     if len(stat) > 0:
         # for each sensor calculate the average of stations in grid
@@ -146,11 +155,16 @@ for gr in grid.grid_id:
             #s = sensor[0]
             #st = stat[0]
             for st in stat:
+                # values
                 x = data.loc[(data.serialno == st) & (data.sensorName == s),'avrangearray']
-                # average across time dimension of each station
-                avg += np.mean(x)
+                # location of station
+                st_loc = stations_delhi.loc[stations_delhi.station == st, 'geometry'].reset_index(drop=True)[0]
+                # distance between station and center of grid
+                dist = center.distance(st_loc)
+                # average across time dimension of each station weighted by dist
+                avg += np.mean(x) / dist
             # average of stations    
-            avg = avg / len(stat)
+            #avg = avg / len(stat)
             grid.loc[grid.grid_id == gr,f'{s}_value'] = avg      
 
 

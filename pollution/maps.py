@@ -6,10 +6,13 @@ source: https://geodata.lib.utexas.edu/catalog/stanford-sh819zz8121
 
 from pathlib import Path
 import geopandas as gpd
+from matplotlib.colors import Normalize
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib import cm
 from shapely.geometry import Point
 from shapely import wkt
+from datetime import datetime, timedelta
 
 wd=Path.cwd()
 
@@ -27,23 +30,30 @@ delhi = gpd.GeoDataFrame(delhi, index=[0], crs='EPSG:4326')
 #*#########################
 #! DATA PREP
 #*#########################
-def prep_data(df, col):
+def prep_data(df, geoms, times):
     '''
     CSVs created contain an Unnamed: 0 column and columns containing geometries are imported as strings. This function drop the former and transforms the latter.
     
+    recover datetime colums
+
     *df=df to be transformed
-    *col=list of column(s) containing geometries
+    *geoms=list of column(s) containing geometries
+    *times=list of columns containing datetimes
     '''
     if 'Unnamed: 0' in df.columns: 
         df=df.drop('Unnamed: 0', axis=1)    
-    for c in col: 
+    for c in geoms: 
         df[c]=df[c].apply(wkt.loads)
-    
+    for c in times:
+        for row in df.index:
+            df.loc[row,c] =  datetime.strptime(df.loc[row,c],'%Y-%m-%d %H:%M:%S')
+
     return df
 
-stations = prep_data(stations, ['geometry'])
-stations_delhi = prep_data(stations_delhi, ['geometry', 'grid_geometry'])
-grid = prep_data(grid, ['geometry'])
+
+stations = prep_data(stations, ['geometry'],['first_reading','last_reading'])
+stations_delhi = prep_data(stations_delhi, ['geometry', 'grid_geometry'],['first_reading','last_reading'])
+grid = prep_data(grid, ['geometry','center'],[])
 
 # make a geo df
 stations = gpd.GeoDataFrame(stations)
@@ -114,13 +124,13 @@ plt.show()
 fig.savefig('visualizations/Delhi_stat.png')
 
 ## add grid
+value = 'PM25_value'
 fig, ax = plt.subplots(figsize=(12,12))
-c = grid['PM25_value']
 map_delhi.plot(color='white', edgecolor='black', ax=ax)
-grid.plot(edgecolor='grey', color='white', ax=ax, label='grid', cmap = 'RdPu')
-cbar = plt.colorbar()
+grid.plot(value, edgecolor='grey', ax=ax, label='grid', cmap = 'RdPu', alpha = .5, legend = True)
 stations_delhi.plot(color='darkred',markersize=10, ax=ax, label='stations')
 plt.axis('off')
+plt.title(f'Delhi with {value}')
 plt.legend()
 plt.show()
 fig.savefig('visualizations/Delhi_stat_grid.png')
