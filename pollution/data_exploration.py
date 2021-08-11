@@ -1,5 +1,5 @@
 '''
-this file is used for data exploration
+this file is used for data exploration of the pollution data
 '''
 
 from pathlib import Path
@@ -146,7 +146,7 @@ for gr in grid.grid_id:
     # extract list of stations in grid cell
     stat = grid.loc[grid.grid_id == gr,'stations'].reset_index(drop=True)[0]
     # centroid of grid cell
-    center = grid.loc[grid.grid_id == gr, 'center'].reset_index(drop=True)[0]
+    #center = grid.loc[grid.grid_id == gr, 'center'].reset_index(drop=True)[0]
     # if stat is not empty
     if len(stat) > 0:
         # for each sensor calculate the average of stations in grid
@@ -158,13 +158,13 @@ for gr in grid.grid_id:
                 # values
                 x = data.loc[(data.serialno == st) & (data.sensorName == s),'avrangearray']
                 # location of station
-                st_loc = stations_delhi.loc[stations_delhi.station == st, 'geometry'].reset_index(drop=True)[0]
+                #st_loc = stations_delhi.loc[stations_delhi.station == st, 'geometry'].reset_index(drop=True)[0]
                 # distance between station and center of grid
-                dist = center.distance(st_loc)
+                #dist = center.distance(st_loc)
                 # average across time dimension of each station weighted by dist
-                avg += np.mean(x) / dist
+                avg += np.mean(x) #/ dist
             # average of stations    
-            #avg = avg / len(stat)
+            avg = avg / len(stat)
             grid.loc[grid.grid_id == gr,f'{s}_value'] = avg      
 
 
