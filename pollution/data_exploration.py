@@ -8,6 +8,7 @@ import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point
 import datetime
+import zipfile
 
 # Path
 wd=Path.cwd()
@@ -15,8 +16,8 @@ wd=Path.cwd()
 #*#########################
 #! LOAD DATA
 #*#########################
-
-data = pd.read_csv(wd.parent/'data'/'pollution'/'env_data_0726.csv')
+zip = zipfile.ZipFile(wd.parent/'data'/'pollution'/'env_data_0726.zip')
+data = pd.read_csv(zip.open('env_data_0726.csv'))
 location = pd.read_csv(wd.parent/'data'/'pollution'/'Indialocationlist.csv')
 grid = gpd.read_file(wd.parent/'data'/'grid'/'gridnwq.shp')
 
