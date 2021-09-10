@@ -34,7 +34,7 @@ def K(x,sigma, pi, phi, phi120, alpha):
 
 class bunching:
 
-    def __init__(self, data, bsize,xmax, xmin, z_upper, z_lower, missing, ex_reg, poly_dgr):
+    def __init__(self, data, bsize,xmax, xmin, z_upper, z_lower, missing, ex_reg, poly_dgr, include_missing = True):
 
         '''
         data: data - series to be used
@@ -57,22 +57,23 @@ class bunching:
         self.missing = missing
         self.ex_reg = ex_reg
         self.poly_dgr = poly_dgr
+        self.incl_missing = include_missing
 
 
     def df_count(self):
         '''
         creates the dataframe by forming bins
         '''
-        nbins = int(self.xmax/self.bsize +1)
-        bins = [(x) * self.bsize for x in range(nbins)]
+        nbins = int(self.xmax/self.bsize +2)
+        bins = [(x) * self.bsize  for x in range(nbins)] 
 
-        nobs = self.x.groupby(pd.cut(self.x, bins)).count()        
+        nobs = self.x.groupby(pd.cut(self.x, bins = bins, right = False)).count()        
 
         # put it in a df
         df_count = pd.DataFrame(list(zip([(x,x+self.bsize) for x in bins],nobs)), columns=['bin', 'nobs'])
 
-        df_count['duration'] = df_count.apply(lambda row: row.bin[1], axis = 1)
-        df_count = df_count.loc[(df_count.duration <= self.xmax) & (df_count.duration >= self.xmin), ].reset_index(drop=True)
+        df_count['duration'] = df_count.apply(lambda row: row.bin[0], axis = 1)
+        df_count = df_count.loc[(df_count.duration < self.xmax) & (df_count.duration >= self.xmin), ].reset_index(drop=True)
         return df_count
 
     def create_vars(self): 
@@ -85,7 +86,7 @@ class bunching:
             n = 'duration' + str(i)
             df_count[n] = df_count.duration ** i
         # add dummy vars
-        df_count['b'] = ((df_count.duration <= self.z_upper) & (df_count.duration > self.z_lower)).astype(int)
+        df_count['b'] = ((df_count.duration <= self.z_upper) & (df_count.duration >= self.z_lower)).astype(int)
         df_count['m'] = ((df_count.duration > self.z_upper) & (df_count.duration <= self.missing)).astype(int)
 
         return df_count
@@ -101,7 +102,8 @@ class bunching:
         coefs.append('duration')
         [coefs.append('duration' + str(i)) for i in range(2,self.poly_dgr + 1)] 
         coefs.append('b')
-        coefs.append('m')
+        if self.incl_missing == True:
+            coefs.append('m')
         X = df_count.loc[:,coefs]
         return X
 
