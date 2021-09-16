@@ -31,10 +31,17 @@ def K(x,sigma, pi, phi, phi120, alpha):
         exp = (pi + phi)*120 + (pi + phi120) * (x-120) + C(x, sigma, alpha)
     return exp
 
+def xopt(sigma, pi, phi, alpha):
+    '''
+    theoretical optimal x from minimization
+    '''
+    x = sigma * (pi + phi)**(-1/(1+alpha))
+    return x
+
 
 class bunching:
 
-    def __init__(self, data, bsize,xmax, xmin, z_upper, z_lower, missing, ex_reg, poly_dgr, include_missing = True):
+    def __init__(self, data, bsize,xmax, xmin, z_upper, z_lower, missing, ex_reg, ex_reg_miss, poly_dgr, include_missing = True):
 
         '''
         data: data - series to be used
@@ -56,6 +63,7 @@ class bunching:
         self.z_lower = z_lower
         self.missing = missing
         self.ex_reg = ex_reg
+        self.ex_reg_miss = ex_reg_miss
         self.poly_dgr = poly_dgr
         self.incl_missing = include_missing
 
@@ -143,9 +151,19 @@ class bunching:
         df = self.prediction()
         x = np.sum(df.loc[(df.duration <= self.z_upper) & (df.duration > self.z_lower), 'y_pred'])
         y = np.sum(df.loc[(df.duration <= self.z_upper) & (df.duration > self.z_lower), 'nobs'])
-        delta_x = ((y-x)*self.bsize) /(x/self.ex_reg)
-        return delta_x
-
+        excess_x = (y-x) /(x/self.ex_reg)
+        return excess_x
+    
+    def get_B(self):
+        '''
+        calculates and returns Bunching Mass
+        '''
+        df = self.prediction()
+        x = np.sum(df.loc[(df.duration <= self.z_upper) & (df.duration > self.z_lower), 'y_pred'])
+        y = np.sum(df.loc[(df.duration <= self.z_upper) & (df.duration > self.z_lower), 'nobs'])
+        B = (y-x) 
+        return B
+    
     def get_mX(self):
         '''
         calculates and returns missing
@@ -153,7 +171,7 @@ class bunching:
         df = self.prediction()
         xm = np.sum(df.loc[(df.duration > self.z_upper) & (df.duration <= self.missing), 'y_pred'])
         ym = np.sum(df.loc[(df.duration > self.z_upper) & (df.duration <= self.missing), 'nobs'])
-        m_x = ((ym-xm)*self.bsize) /(xm/self.ex_reg)
+        m_x = (ym-xm)/(xm/self.ex_reg_miss)
         return m_x
 
     def total_bunch(self):
@@ -171,11 +189,8 @@ class bunching:
             return add 
 
         def gap(d):
-            return (y -x)*self.bsize - integrate.quad(I,60,60+d)[0]
+            return (y -x) - integrate.quad(I,60,60+d)[0]
 
-        res = fsolve(gap, 35)
+        res = fsolve(gap, 35)*self.bsize
         
         return res[0]
-
-
-
