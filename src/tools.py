@@ -31,12 +31,36 @@ def K(x,sigma, pi, phi, phi120, alpha):
         exp = (pi + phi)*120 + (pi + phi120) * (x-120) + C(x, sigma, alpha)
     return exp
 
-def xopt(sigma, pi, phi, alpha):
+def TotalK(x,sigma, pi, phi, phi120, alpha, N):
+    '''
+    calculate total cost
+    '''
+    if x <= 60:
+        exp =  N * (pi) * x + C(x, sigma, alpha)
+    elif x <= 120:  
+        exp = N * (pi + phi) * x + C(x, sigma, alpha) 
+    elif x > 120:
+        exp = N * (pi + phi)*120 + N*(pi + phi120) * (x-120) + C(x, sigma, alpha)
+    return exp
+
+def xopt(sigma, pi, phi, alpha, N):
     '''
     theoretical optimal x from minimization
     '''
-    x = sigma * (pi + phi)**(-1/(1+alpha))
+    x = sigma * (N*(pi + phi))**(-1/(1+alpha))
     return x
+
+def V(phi, phi120, x):
+    '''
+    fine to pay to customer
+    '''
+    if x <= 60:
+        fine = 0
+    elif x <= 120:
+        fine = x * phi
+    elif x > 120:
+        fine = x* phi + phi120 * (x-120)
+    return fine
 
 
 class bunching:
@@ -194,3 +218,6 @@ class bunching:
         res = fsolve(gap, 35)*self.bsize
         
         return res[0]
+
+
+
