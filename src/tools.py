@@ -6,6 +6,7 @@
 import pandas as pd
 import numpy as np
 from scipy.optimize import fsolve
+from sympy import symbols
 from scipy import integrate
 import statsmodels.api as sm
 
@@ -19,38 +20,7 @@ def C(x, sigma, alpha):
     power = -alpha
     return  first * (second**power)
 
-def K(x,sigma, pi, phi, phi120, alpha):
-    '''
-    calculate total cost
-    '''
-    if x <= 60:
-        exp =  (pi) * x + C(x, sigma, alpha)
-    elif x <= 120:  
-        exp = (pi + phi) * x + C(x, sigma, alpha) 
-    elif x > 120:
-        exp = (pi + phi)*120 + (pi + phi120) * (x-120) + C(x, sigma, alpha)
-    return exp
-
-def TotalK(x,sigma, pi, phi, phi120, alpha, N):
-    '''
-    calculate total cost
-    '''
-    if x <= 60:
-        exp =  N * (pi) * x + C(x, sigma, alpha)
-    elif x <= 120:  
-        exp = N * (pi + phi) * x + C(x, sigma, alpha) 
-    elif x > 120:
-        exp = N * (pi + phi)*120 + N*(pi + phi120) * (x-120) + C(x, sigma, alpha)
-    return exp
-
-def xopt(sigma, pi, phi, alpha, N):
-    '''
-    theoretical optimal x from minimization
-    '''
-    x = sigma * (N*(pi + phi))**(-1/(1+alpha))
-    return x
-
-def V(phi, phi120, x):
+def V(phi, phi120, x, N):
     '''
     fine to pay to customer
     '''
@@ -60,8 +30,64 @@ def V(phi, phi120, x):
         fine = x * phi
     elif x > 120:
         fine = x* phi + phi120 * (x-120)
-    return fine
+    return fine*N
 
+def K(x,sigma, pi, phi, phi120, alpha, N):
+    '''
+    calculate total cost
+    '''    
+    return  pi * x + V(phi, phi120, x, N) + C(x, sigma, alpha)
+
+
+def xopt(sigma, pi, phi, alpha):
+    '''
+    theoretical optimal x from minimization
+    '''
+    return sigma * ((pi + phi))**(-1/(1+alpha))
+    
+
+def solve_alpha(x, delta_x, pi, phi, phi120, startingvalue = 1):
+    ### solve for alpha
+    a = symbols('a')
+    
+    def sigmaI(a):
+        '''
+        sigma as a function of x
+        '''
+        if x == 60: z = (x + delta_x)*(pi)**(1/(1+a))
+        if x == 120: z = (x + delta_x)*(pi + phi)**(1/(1+a))
+        return z
+
+    def  xI(a):
+        '''
+        x with fine
+        '''
+        if x == 60: s = sigmaI(a) * (pi+phi)**(-1/(1+a))
+        if x == 120: s = sigmaI(a) * (pi+phi120)**(-1/(1+a))
+        return  s
+
+    def L(a):
+        '''
+        cost under fine
+        '''
+        return K(xI(a), sigmaI(a), pi, phi, phi120,alpha=a, N=1)        
+
+    def R(a):
+        '''
+        cost when bunching
+        '''
+        if x == 60: y = pi*x + C(x, sigmaI(a), a)
+        if x == 120: y = (pi + phi)*x + C(x, sigmaI(a), a)
+        return  y
+
+    def solution(a):
+        '''
+        when equality holds
+        '''
+        return L(a) - R(a)
+
+    return fsolve(solution, startingvalue)[0]
+    
 
 class bunching:
 
@@ -78,8 +104,8 @@ class bunching:
         ex_reg: number of bins to exclude around bunching
         poly_dgr: degree of polynomial to be used in the estimation
         '''
-        
-        self.x = data      
+       
+        self.x = data     
         self.bsize = bsize
         self.xmax = xmax
         self.xmin = xmin
@@ -97,9 +123,9 @@ class bunching:
         creates the dataframe by forming bins
         '''
         nbins = int(self.xmax/self.bsize +2)
-        bins = [(x) * self.bsize  for x in range(nbins)] 
+        bins = [(x) * self.bsize  for x in range(nbins)]
 
-        nobs = self.x.groupby(pd.cut(self.x, bins = bins, right = False)).count()        
+        nobs = self.x.groupby(pd.cut(self.x, bins = bins, right = False)).count()       
 
         # put it in a df
         df_count = pd.DataFrame(list(zip([(x,x+self.bsize) for x in bins],nobs)), columns=['bin', 'nobs'])
@@ -108,12 +134,12 @@ class bunching:
         df_count = df_count.loc[(df_count.duration < self.xmax) & (df_count.duration >= self.xmin), ].reset_index(drop=True)
         return df_count
 
-    def create_vars(self): 
+    def create_vars(self):
         '''
         make polynomials and the bunching and missing mass
         '''
         df_count = self.df_count()     
-        # make polynomials  
+        # make polynomials 
         for i in range(2,self.poly_dgr +1):
             n = 'duration' + str(i)
             df_count[n] = df_count.duration ** i
@@ -132,7 +158,7 @@ class bunching:
         # get columns
         coefs = ['Intercept']
         coefs.append('duration')
-        [coefs.append('duration' + str(i)) for i in range(2,self.poly_dgr + 1)] 
+        [coefs.append('duration' + str(i)) for i in range(2,self.poly_dgr + 1)]
         coefs.append('b')
         if self.incl_missing == True:
             coefs.append('m')
@@ -177,7 +203,7 @@ class bunching:
         y = np.sum(df.loc[(df.duration <= self.z_upper) & (df.duration > self.z_lower), 'nobs'])
         excess_x = (y-x) /(x/self.ex_reg)
         return excess_x
-    
+   
     def get_B(self):
         '''
         calculates and returns Bunching Mass
@@ -185,9 +211,9 @@ class bunching:
         df = self.prediction()
         x = np.sum(df.loc[(df.duration <= self.z_upper) & (df.duration > self.z_lower), 'y_pred'])
         y = np.sum(df.loc[(df.duration <= self.z_upper) & (df.duration > self.z_lower), 'nobs'])
-        B = (y-x) 
+        B = (y-x)
         return B
-    
+   
     def get_mX(self):
         '''
         calculates and returns missing
@@ -210,14 +236,11 @@ class bunching:
             add = 0
             for d in range(self.poly_dgr +1):
                 add += model.params[d]* r**d
-            return add 
+            return add
 
         def gap(d):
             return (y -x) - integrate.quad(I,60,60+d)[0]
 
         res = fsolve(gap, 35)*self.bsize
-        
+       
         return res[0]
-
-
-
