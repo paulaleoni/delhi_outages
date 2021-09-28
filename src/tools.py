@@ -36,14 +36,16 @@ def K(x,sigma, pi, phi, phi120, alpha, N):
     '''
     calculate total cost
     '''    
-    return  pi * x + V(phi, phi120, x, N) + C(x, sigma, alpha)
+    if phi >0: return  pi * x + V(phi, phi120, x, N) + C(x, sigma, alpha)
+    else: return pi * x + C(x, sigma, alpha)
+    
 
 
-def xopt(sigma, pi, phi, alpha):
+def xopt(sigma, pi, phi, alpha, N):
     '''
     theoretical optimal x from minimization
     '''
-    return sigma * ((pi + phi))**(-1/(1+alpha))
+    return sigma * ((pi + phi*N))**(-1/(1+alpha))
     
 
 def solve_alpha(x, delta_x, pi, phi, phi120, startingvalue = 1):
