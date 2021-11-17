@@ -89,6 +89,27 @@ axs[1].legend()
 
 # # Bunching Estimation
 
+# - separately for each firm and notch
+# - define, binsize, excluded region, missing region, maximum  and minimum value of x considered and the degree of the poynomial (6 in the moment)
+# - preparation steps
+#     - create a dataframe at the bin-level by sorting all observations (duration) of the dataframe in bins with binsize as given
+#     - count the observations being in each bin
+#     - create polynomials of the lowerbound of each bin up the degree as given
+#     - create dummy variables for bunching and missing mass
+# - estimation
+#     - create a regressor matrix using an intercept, the polynomials and the dummy variables
+#     - OLS of #observations on the regressor matrix
+# - prediction
+#     - set all dummies to zero
+#     - use the estimated coefficients to predict the number of observations in each bin
+# - $\Delta x$ (total_bunch? - maybe be should switch our wording to avoid confusion)
+#     - extract the prediction and the actual observations in the excluded region 
+#     - using the estimated model parameters, approximate a function
+#     - integrate this function from the notch until notch + z 
+#     - get the difference between observation and prediction
+#     - from that difference, substract the calculated integral and find the value of z for which it is zero
+#     - the found z is our $\Delta x$
+
 # In[24]:
 
 
@@ -198,6 +219,19 @@ for i in range(3):
 # !! this is maybe not optimal. Right now, I am assuming a poisson distribution in the bins of the missing mass. \
 # 
 
+# - separately for each firm
+# - first, create a dataframe using the predictions from bunching estimation on bin-level
+#     - create dummies for bins being in the bunching and missing mass at 60 and 120
+#     - calculatie difference between number of observation in each bin and the prediction
+#     - calculate probability of an observation being in a specific bin: prediction/sum(prediction)
+# - second
+#     - for each bin in the bunching region
+#     - take difference in each bin, identify the observations (original data) that fall in that bin and randomly sample from those with size = difference
+#     - randomly select a bin from the missing mass weighted by the probability
+#     - redistribute observations from the selected bunching-bin to the selected missing-bin using a poisson distribution
+# - save this as column 'duration_cf' in the dataframe
+# 
+
 # In[101]:
 
 
@@ -243,7 +277,6 @@ for f in data.discom.unique():
 
 
 ## difference in b60 need to be distributed to missing mass
-## can we improve this? It is okay but not optimal
 
 # new column
 data['duration_cf'] = data.duration_minutes
@@ -277,6 +310,8 @@ for f in data.discom.unique():
 
 #data.describe()
 
+
+# ### plot of estimated counterfactual distribution and actual distribution
 
 # In[105]:
 
