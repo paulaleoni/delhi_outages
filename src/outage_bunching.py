@@ -5,7 +5,7 @@
 # 
 # take concept from simulation
 
-# In[1]:
+# In[2]:
 
 
 # load packages
@@ -27,7 +27,7 @@ import zipfile
 np.random.seed(111)
 
 
-# In[2]:
+# In[73]:
 
 
 # load data
@@ -63,16 +63,26 @@ data.loc[data.unservedmuduetooutage.isna() ,'unservedmuduetooutage'] = 0.00001
 #data.describe()
 
 
+# In[25]:
+
+
+bunching = {}
+for f in data.discom.unique():
+    bunching[f] = {'data': data[data.discom == f]}
+
+bunching['pooled'] = {'data': data} 
+
+
 # density of duration 
 
-# In[4]:
+# In[29]:
 
 
 xmax  = 420
 
 fig, axs = plt.subplots(1,2,figsize=(18,5))
-for f in data.discom.unique():
-    dt = data[data.discom == f]
+for f in bunching:
+    dt = bunching[f]['data']
     sns.kdeplot(dt.duration_minutes, ax = axs[0], label = f)
     axs[1].hist(dt.duration_minutes, histtype = 'step', bins = xmax, label = f)
 
@@ -110,7 +120,7 @@ axs[1].legend()
 #     - from that difference, substract the calculated integral and find the value of z for which it is zero
 #     - the found z is our $\Delta x$
 
-# In[24]:
+# In[31]:
 
 
 # bunching at x = 60
@@ -122,12 +132,12 @@ z_lower60 = z - bsize*ex_reg
 
 missing60 = z + ex_reg_miss*bsize
 
-bunching = {}
-for f in data.discom.unique():
-    dt = data[data.discom == f]
+for f in bunching:
+    dt = bunching[f]['data']
     bunch60 = tools.bunching(dt.duration_minutes, bsize = bsize, xmax= 115, xmin= 0, z_upper= z, z_lower= z_lower60, missing = missing60, ex_reg= ex_reg, ex_reg_miss=ex_reg_miss, poly_dgr=6)
-    bunching[f] = {'bunch60': bunch60}    
+    bunching[f].update({'bunch60': bunch60})    
     #display(bunch60.estimation_res())
+    print(f'-----bunching at 60 -----{f}----------')
     print('EX:', bunch60.get_deltaX(), 'mX:', bunch60.get_mX(), 'B:', bunch60.get_B())
     print('total bunching',bunch60.total_bunch())
 
@@ -136,7 +146,7 @@ for f in data.discom.unique():
 
 
 
-# In[27]:
+# In[33]:
 
 
 # bunching at x = 120
@@ -147,11 +157,12 @@ z_lower120 = z - 5 * bsize
 missing120 = z + ex_reg * bsize
 
 
-for f in data.discom.unique():
-    dt = data[data.discom == f]
+for f in bunching:
+    dt = bunching[f]['data']
     bunch120 = tools.bunching(dt.duration_minutes, bsize = bsize, xmax= 160, xmin= 90, z_upper= z, z_lower= z_lower120, missing = missing120, ex_reg= ex_reg, ex_reg_miss = ex_reg_miss, poly_dgr=9, include_missing=False)
     bunching[f].update({'bunch120': bunch120})
     #display(bunch120.estimation_res())
+    print(f'-----bunching at 120 -----{f}----------')
     print('deltaX:', bunch120.get_deltaX())
     print('total bunching',bunch120.total_bunch())
 
@@ -160,14 +171,14 @@ for f in data.discom.unique():
 
 # plot of counterfactual and actual data
 
-# In[43]:
+# In[48]:
 
 
 
-fig, ax = plt.subplots(1,3,figsize=(15,5))
+fig, ax = plt.subplots(1,len(bunching),figsize=(15,5))
 
-for i in range(3):
-    f = data.discom.unique()[i]
+for i in range(len(bunching)):
+    f = list(bunching.keys())[i]
     # concat the two predictions
     pred60 = bunching[f]['bunch60'].prediction()
     pred120 = bunching[f]['bunch120'].prediction()
@@ -187,13 +198,13 @@ for i in range(3):
 
 # Visualize $\Delta x$
 
-# In[48]:
+# In[49]:
 
 
-fig, ax = plt.subplots(1,3,figsize=(15,5))
+fig, ax = plt.subplots(1,len(bunching),figsize=(15,5))
 min = -50
-for i in range(3):
-    f = data.discom.unique()[i]
+for i in range(len(bunching)):
+    f = list(bunching.keys())[i]
     bunch = bunching[f]['bunch60']
     pred60 = bunching[f]['bunch60'].prediction()
     b = np.round(60 + bunch.total_bunch())
@@ -232,10 +243,10 @@ for i in range(3):
 # - save this as column 'duration_cf' in the dataframe
 # 
 
-# In[101]:
+# In[65]:
 
 
-for f in data.discom.unique():
+for f in bunching:
     bunch60 = bunching[f]['bunch60']
     bunch120 = bunching[f]['bunch120']
     # concat the two predictions
@@ -272,8 +283,7 @@ for f in data.discom.unique():
     bunching[f].update({'counterfactual_bins':cf})
 
 
-# In[103]:
-
+# In[100]:
 
 
 ## difference in b60 need to be distributed to missing mass
@@ -281,9 +291,22 @@ for f in data.discom.unique():
 # new column
 data['duration_cf'] = data.duration_minutes
 
-for f in data.discom.unique():
+# in case of pooling etc.
+notfirms = [x for x in bunching.keys() if x not in data.discom.unique()]
+for x in notfirms:
+    data[f'duration_cf_{f}'] = data.duration_minutes
+
+
+for f in bunching:
     # subset dataframe but keep index
-    dt =  data[data.discom == f]
+    if f in data.discom.unique():
+        dt = data[data.discom == f]
+        column = 'duration_cf'
+    if f not in data.discom.unique():
+        dt = data.copy()
+        column = f'duration_cf_{f}'
+    
+    
     # get counterfactual bins
     cf = bunching[f]['counterfactual_bins']
 
@@ -305,23 +328,31 @@ for f in data.discom.unique():
             mis = cf.loc[m == 1,].sample(n=1, axis =0, weights = cf.prob).bin.reset_index(drop=True)[0]
             # create n=diff random values in bin
             new = np.random.poisson((mis[1] +  mis[0])/2, size = diff) # here I am assuming a poisson distribution in the bins
-            # replace values in new_data
-            data.loc[new_data.index.tolist(),'duration_cf'] = new
+            # replace values in 
+            data.loc[new_data.index.tolist(), column] = new
+            dt.loc[new_data.index.tolist(), column] = new
+    # update dictionary
+    bunching[f].update({'data':dt})
+           
 
 #data.describe()
 
 
 # ### plot of estimated counterfactual distribution and actual distribution
 
-# In[105]:
+# In[96]:
 
 
 # should look similar to counterfactual density from bunching estimation
-fig, ax = plt.subplots(1,3,figsize=(15,5))
-for i in range(3):
-    f = data.discom.unique()[i]
+fig, ax = plt.subplots(1,len(bunching),figsize=(15,5))
+for i in range(len(bunching)):
+    f = list(bunching.keys())[i]
+    column = 'duration_cf'
     dt = data[data.discom == f]
-    sns.kdeplot(dt.duration_cf[dt.duration_cf < 200], label = 'counterfactual', ax = ax[i])
+    if f not in data.discom.unique(): 
+        column = f'duration_cf_{f}'
+        dt = data
+    sns.kdeplot(dt[column][dt[column] < 200], label = 'counterfactual', ax = ax[i])
     sns.kdeplot(dt.duration_minutes[dt.duration_minutes < 200], label='observation', ax = ax[i])
     ax[i].axvline(60)
     ax[i].axvline(120)
@@ -331,7 +362,7 @@ for i in range(3):
 #plt.ylim(0.000,0.004)
 
 
-# In[106]:
+# In[97]:
 
 
 # export 
