@@ -15,17 +15,21 @@ import numpy as np
 import geopandas as gpd
 import matplotlib.pyplot as plt
 from shapely.geometry import Point
+import datetime
 #from rasterio.transform import xy
 import rioxarray as rxr
 #from shapely.geometry.multipolygon import MultiPolygon
 #from shapely import wkt
 #import numpy as np
 import rasterio
+from rasterio.io import MemoryFile
 from rasterio.mask import mask
 #import matplotlib.colors as colors
 #from adjustText import adjust_text
-#import urllib.request
-#import io
+import requests
+import json
+import io
+from hide import eogdata_user, eogdata_pw
 
 #########################
 # Functions
@@ -36,13 +40,57 @@ def getFeatures(gdf):
     import json
     return [json.loads(gdf.to_json())['features'][0]['geometry']]
 
-################################
+
+def tif_from_url(date, shapefile):
+    # shapefile coords
+    coords = getFeatures(shapefile)
+
+    #url corresponding to date
+    url = f'https://eogdata.mines.edu/nighttime_light/nightly/rade9d/SVDNB_npp_d{date}.rade9d.tif'
+
+    # Retrieve access token
+    params = {    
+        'client_id': 'eogdata_oidc',
+        'client_secret': '2677ad81-521b-4869-8480-6d05b9e57d48',
+        'username': eogdata_user,
+        'password': eogdata_pw,
+        'grant_type': 'password'
+    }
+    token_url = 'https://eogauth.mines.edu/auth/realms/master/protocol/openid-connect/token'
+    response = requests.post(token_url, data = params)
+    access_token_dict = json.loads(response.text)
+    access_token = access_token_dict.get('access_token')
+    # Submit request with token bearer
+    ## Change data_url variable to the file you want to download
+    data_url = url
+    auth = 'Bearer ' + access_token
+    headers = {'Authorization' : auth}
+    # make request
+    req = requests.get(data_url, headers = headers, stream=True)
+    with MemoryFile(req.content) as memfile:
+        with memfile.open() as data:
+            tif = rxr.open_rasterio(data, masked=True).rio.clip(coords, from_disk=True)
+    return tif
+
+def dates_list(start, end, step=1):
+    start = datetime.date(int(start[0:4]), int(start[4:6]), int(start[6:8]))
+    end = datetime.date(int(end[0:4]), int(end[4:6]), int(end[6:8]))
+    list = []
+    day = start
+    while day <= end:
+        list.append(day)
+        day += datetime.timedelta(step)
+    return list
+
+
+###########################
+# shapefiles
+##########################
 
 wd = Path.cwd()
 
 shp_file = wd.parent/'data'/'shp'/'stanford-sh819zz8121-shapefile.zip'
 grid_file = wd.parent/'data'/'grid'/'gis.zip'
-tif_file = wd.parent/'data'/'satellite'/'SVDNB_npp_d20220112.rade9d.tif'
 
 # load shapefile in geopandas dataframe 
 shp = gpd.read_file(shp_file)
@@ -50,59 +98,44 @@ shp = gpd.read_file(shp_file)
 shp = shp.loc[shp.nam == 'DELHI',].reset_index(drop=True)
 grid = gpd.read_file(grid_file)
 
-grid.plot(edgecolor='grey', alpha = .5, color='None')
 
-coords = getFeatures(shp)
+###########################
+# get tif 
+#########################
 
-url = 'https://eogdata.mines.edu/nighttime_light/nightly/rade9d/SVDNB_npp_d20220111.rade9d.tif'
+# define date to retrive tif
+year = '2022'
+month = '01'
+day = '11'
+start_date = year + month + day
+end_date = year + month + '12'
 
-test =  rxr.open_rasterio(tif_file, masked=True).rio.clip(coords, from_disk=True)
-test.plot()
+# list of dates
+dates = dates_list(start_date, end_date)
+
+for d in dates:
+    string = d.strftime('%Y%m%d')
+    # get data 
+    data = tif_from_url(string, shp)
+    df = data.to_dataframe(name = 'pixel')
+    df.reset_index(inplace=True)
+    df['point'] = df.apply(lambda row: Point(row.x, row.y), axis=1)
+    # add values to grid
+    grid[f'pixel_med_{string}'] = 0
+    for i in grid.index:
+        geom = grid.geometry[i]
+        #id = grid.grid_id[i]
+        bool =  df.apply(lambda row: row.point.within(geom), axis=1)
+        med = df.pixel[bool].median()
+        grid.loc[i,f'pixel_med_{string}'] = med
+
+fig, ax = plt.subplots()
+grid.plot(f'pixel_med_{end_date}',edgecolor='grey', alpha = .5, cmap = 'RdPu', ax=ax)
+plt.axis('off')
 plt.show()
 
-baseurl = 'https://eogdata.mines.edu/nighttime_light/'
-username = "plbeck@web.de"
-password = "dana@uni4"
 
 '''
-password_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
-password_mgr.add_password(None, baseurl, username, password)
-
-req = urllib.request.Request(url)
-rxr.open_rasterio(url, masked=True, lock=False).rio.clip(coords, from_disk=True)
-
-with urllib.request.urlopen(req) as resp:
-    print(resp.read())
-    raster = rxr.open_rasterio(io.BytesIO(resp.read()), masked=True).rio.clip(coords, from_disk=True)
-    raster.plot()
-    plt.show()
-'''
-################################
-import requests
-import json
-import io
-#import os
-# Retrieve access token
-params = {    
-    'client_id': 'eogdata_oidc',
-    'client_secret': '2677ad81-521b-4869-8480-6d05b9e57d48',
-    'username': username,
-    'password': password,
-    'grant_type': 'password'
-}
-token_url = 'https://eogauth.mines.edu/auth/realms/master/protocol/openid-connect/token'
-response = requests.post(token_url, data = params)
-access_token_dict = json.loads(response.text)
-access_token = access_token_dict.get('access_token')
-# Submit request with token bearer
-## Change data_url variable to the file you want to download
-data_url = url
-auth = 'Bearer ' + access_token
-headers = {'Authorization' : auth}
-#response = requests.get(data_url, headers = headers, stream=True)
-#response.encoding = 'utf-8'
-#response.text
-
 resp = requests.get(data_url, headers = headers, stream=True)
 #test = rxr.open_rasterio(resp.content, masked=True, chunks=True).rio.clip(coords)
 
@@ -129,46 +162,14 @@ with requests.get(data_url, headers = headers, stream=True) as resp:
     print(test)
     test.plot()
     plt.show()
-
-
-
-from PIL import Image
-#test = Image.open(io.BytesIO(req.content))
-
-import zipfile
-import gzip
-req = requests.get(data_url, headers = headers, stream=True)
-with gzip.open('testfile.tif.gz', 'wb') as gz:
-    gz.write(req.content)
-with zipfile.ZipFile('testfile.zip', 'w',compression=zipfile.ZIP_DEFLATED) as out:
-    out.write(req.content) 
-
-
 '''
-
+'''
 fig, ax = plt.subplots()
 grid.plot(edgecolor='grey', alpha = .5, color='None', ax=ax)
 test.plot(ax=ax)
 plt.show()
 '''
-
-# make array to dataframe
-test = rxr.open_rasterio('/vsigzip/testfile.tif.gz', masked=True).rio.clip(coords, from_disk=True)
-df = test.to_dataframe(name = 'pixel')
-df.reset_index(inplace=True)
-df['point'] = df.apply(lambda row: Point(row.x, row.y), axis=1)
-df['grid_id'] = np.nan
-
-# add values to grid
-grid['pixel_med'] = 0
-for i in grid.index:
-    geom = grid.geometry[i]
-    id = grid.grid_id[i]
-    bool =  df.apply(lambda row: row.point.within(geom), axis=1)
-    med = df.pixel[bool].median()
-    grid.loc[i,'pixel_med'] = med
-
-fig, ax = plt.subplots()
-grid.plot('pixel_med',edgecolor='grey', alpha = .5, cmap = 'RdPu', ax=ax)
-plt.axis('off')
-plt.show()
+'''
+with gzip.open('testfile.tif.gz', 'wb') as gz:
+    gz.write(req.content)
+'''
