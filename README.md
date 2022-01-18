@@ -25,3 +25,8 @@
 
 ### data_correlations
 - check the correlations of different datasets
+
+## Nightlight data
+- retrieving nightlight data from VIIRS add a daily level (Nightly DNB Mosaic and Cloud, see: https://eogdata.mines.edu/products/vnl/#daily)
+- summarise in a dataframe at grid level
+- plot for single day
