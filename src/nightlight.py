@@ -129,8 +129,9 @@ for d in dates:
         med = df.pixel[bool].median()
         grid.loc[i,f'pixel_med_{string}'] = med
 
+colors = 'gist_gray' # 'RdPu'
 fig, ax = plt.subplots()
-grid.plot(f'pixel_med_{end_date}',edgecolor='grey', alpha = .5, cmap = 'RdPu', ax=ax)
+grid.plot(f'pixel_med_{end_date}',edgecolor='grey', alpha = .5, cmap = colors, ax=ax)
 plt.axis('off')
 plt.show()
 
