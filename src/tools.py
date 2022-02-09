@@ -201,9 +201,9 @@ class bunching:
         calculates and returns delta x
         '''
         df = self.prediction()
-        x = np.sum(df.loc[(df.duration <= self.z_upper) & (df.duration > self.z_lower), 'y_pred'])
-        y = np.sum(df.loc[(df.duration <= self.z_upper) & (df.duration > self.z_lower), 'nobs'])
-        excess_x = (y-x) /(x/self.ex_reg)
+        x = np.sum(df.loc[(df.duration <= self.z_upper) & (df.duration >= self.z_lower), 'y_pred'])
+        y = np.sum(df.loc[(df.duration <= self.z_upper) & (df.duration >= self.z_lower), 'nobs'])
+        excess_x = (y-x) /(y/self.ex_reg)
         return excess_x
    
     def get_B(self):
@@ -223,7 +223,7 @@ class bunching:
         df = self.prediction()
         xm = np.sum(df.loc[(df.duration > self.z_upper) & (df.duration <= self.missing), 'y_pred'])
         ym = np.sum(df.loc[(df.duration > self.z_upper) & (df.duration <= self.missing), 'nobs'])
-        m_x = (ym-xm)/(xm/self.ex_reg_miss)
+        m_x = (xm-ym)/(ym/self.ex_reg_miss)
         return m_x
 
     def total_bunch(self):
